@@ -1,0 +1,66 @@
+name: THxP Analysis
+
+on:
+  push:
+    paths:
+      - 'data/**/*.csv'
+      - 'data/*.csv'
+      - 'analyze_thxp.py'
+      - 'requirements.txt'
+      - '.github/workflows/analyze.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install pandas numpy matplotlib pytz
+          fi
+
+      - name: Run analysis
+        run: |
+          mkdir -p outputs
+          python analyze_thxp.py --input "data/*.csv" --half-life-min 30 --freq 5T --top 5 --outdir outputs --burst-enable --burst-metric inflow --burst-win 12 --burst-z 3.0 --burst-min-consec 2
+
+      - name: Prepare public folder
+        run: |
+          mkdir -p public
+          cp -r outputs/* public/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: analyze
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
